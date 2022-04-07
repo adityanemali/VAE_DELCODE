@@ -35,7 +35,7 @@ class Dataloder_img(data.Dataset):
         # change to numpy
         return img
 
-path = '/home/aditya/Documents/DELCODE-GP_MKL/data/unmodulated_segments/2mm/wp1*'
+path = '/home/aditya/Documents/DELCODE-GP_MKL/data/unmodulated_segments/4mm/wp1*'
 
 delcode_cov = 'data/delcode_cov1079.mat'
 delcode_data, hippo_data = get_data.get_data_mat(delcode_cov)
@@ -44,11 +44,8 @@ delcode_data, hippo_data = get_data.get_data_mat(delcode_cov)
 l1_loss = L1Loss()
 kl_loss = KLDivergence()
 
-mask_img = 'data/mask.nii'
+mask_img = 'data/icvmask_4mm.nii'
 mask_data = nib.load(mask_img).get_fdata()
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
 mask_data = mask_data.reshape(1, 1, mask_data.shape[0], mask_data.shape[1], mask_data.shape[2])
 mask_data = torch.tensor(mask_data)
 mask_data = mask_data.to(device, dtype=torch.float)
@@ -98,47 +95,53 @@ def validate(model, dataloader, dataset, device):
 
 
 # Hyper-parameters
-batch_size = 32
+batch_size = 16
 learning_rate =  0.0001
 full_dataset = Dataloder_img(path, delcode_data, 'age')
 
-train_size = int(0.75 * len(full_dataset))
+train_size = int(0.80 * len(full_dataset))
 val_size = len(full_dataset) - train_size
 train_dataset, val_dataset = torch.utils.data.random_split(full_dataset, [train_size, val_size])
 train_loader = data.DataLoader(train_dataset, shuffle=True, batch_size=batch_size)
-val_loader = data.DataLoader(val_dataset, shuffle=False, batch_size=batch_size)
+val_loader = data.DataLoader(val_dataset, shuffle=True, batch_size=batch_size)
+
+dims = [1, 2, 4, 8, 16, 32, 64, 128]
+
+for dim in dims:
+    print("Running model, latent dimension:", dim)
+    print("---------------------------------------------------------")
+    latent_dim = dim
+    model = VAE(latent_dim=latent_dim)
+    model= nn.DataParallel(model)
+    model.to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-2)
+
+    # initialize SaveBestModel class
+    save_best_model = SaveBestModel()
+    save_model_path = 'outputs/dim_'+str(latent_dim)
+    lr = 0.0001
+    epochs = 50
+    train_loss = []
+    valid_loss = []
+    for epoch in range(epochs):
+        print(f"Epoch {epoch+1} of {epochs}")
+        train_epoch_loss = train(model, train_loader, train_dataset, device, opt)
+        valid_epoch_loss= validate(model, val_loader, val_dataset, device)
+        train_loss.append(train_epoch_loss)
+        valid_loss.append(valid_epoch_loss)
+        save_best_model(valid_epoch_loss, epoch, model, opt, save_model_path)
+        print('-' * 50)
+        print(f"Train Loss: {train_epoch_loss:.4f}")
+        print(f"Val Loss: {valid_epoch_loss:.4f}")
+
+    save_model(epochs, model, opt, save_model_path)
+
+    loss_data = pd.DataFrame()
+    loss_data['training_loss'] = train_loss
+    loss_data['validation_loss'] = valid_loss
 
 
-latent_dim = 128
-model = VAE(latent_dim=latent_dim)
-model= nn.DataParallel(model)
-model.to(device)
-opt = torch.optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-2)
-
-# initialize SaveBestModel class
-save_best_model = SaveBestModel()
-save_model_path = 'outputs/dim_'+str(latent_dim)
-lr = 0.001
-epochs = 50
-train_loss = []
-valid_loss = []
-for epoch in range(epochs):
-    print(f"Epoch {epoch+1} of {epochs}")
-    train_epoch_loss = train(model, train_loader, train_dataset, device, opt)
-    valid_epoch_loss= validate(model, val_loader, val_dataset, device)
-    train_loss.append(train_epoch_loss)
-    valid_loss.append(valid_epoch_loss)
-    save_best_model(valid_epoch_loss, epoch, model, opt, save_model_path)
-    print('-' * 50)
-    print(f"Train Loss: {train_epoch_loss:.4f}")
-    print(f"Val Loss: {valid_epoch_loss:.4f}")
-
-save_model(epochs, model, opt, save_model_path)
-
-loss_data = pd.DataFrame()
-loss_data['training_loss'] = train_loss
-loss_data['validation_loss'] = valid_loss
-
-
-save_path = 'results/'
-loss_data.to_csv(save_path+'loss_latent_dim_'+str(latent_dim)+'.csv', index=0)
+    save_path = 'results/'
+    loss_data.to_csv(save_path+'loss_latent_dim_'+str(latent_dim)+'.csv', index=0)
+    print("Successful, latent dimension:", dim)
+    print("---------------------------------------------------------")

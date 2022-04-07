@@ -28,7 +28,7 @@ class SaveBestModel:
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict()
             }, save_path+'/best_model.pth')
-
+            return True
 
 def save_model(epochs, model, optimizer, save_path):
     """

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-import math 
+import math
 
 
 
@@ -79,15 +79,15 @@ class Decoder(nn.Module):
     def __init__(self, latent_dim):
         super(Decoder, self).__init__()
         self.latent_dim = latent_dim
-        self.linear_up = nn.Linear(latent_dim, 256*80)
+        self.linear_up = nn.Linear(latent_dim, 256)
         self.relu = nn.ReLU()
-        self.upsize5 = upsample_conv(input_channels=256, output_channels=128, size=(8, 9, 8), kernel_size=1)
+        self.upsize5 = upsample_conv(input_channels=256, output_channels=128, size=(2, 2, 2), kernel_size=1)
         self.res_block5 = resnet_block(channels=128, kernel_size=3)
-        self.upsize4 = upsample_conv(input_channels=128, output_channels=64, size=(15,17,15), kernel_size=1)
+        self.upsize4 = upsample_conv(input_channels=128, output_channels=64, size=(4,4,4), kernel_size=1)
         self.res_block4 = resnet_block(channels=64, kernel_size=3)
-        self.upsize3 = upsample_conv(input_channels=64, output_channels=32, size=(30,34,30), kernel_size=1)
+        self.upsize3 = upsample_conv(input_channels=64, output_channels=32, size=(8,8,8), kernel_size=1)
         self.res_block3 = resnet_block(channels=32, kernel_size=3)
-        self.upsize2 = upsample_conv(input_channels=32, output_channels=1, size=(59,68,59), kernel_size=1)
+        self.upsize2 = upsample_conv(input_channels=32, output_channels=1, size=(16,16,16), kernel_size=1)
         self.res_block2 = resnet_block(channels=1, kernel_size=3)
         #self.upsize1 = upsample_conv(input_channels=32, output_channels=1, size=(118,136,118), kernel_size=1)
         #self.res_block1 = resnet_block(channels=1, kernel_size=3)
@@ -95,7 +95,7 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         x = self.relu(self.linear_up(x))
-        x = x.view(-1, 256, 4, 5, 4)
+        x = x.view(-1, 256, 1, 1, 1)
         x = self.upsize5(x)
         x = self.res_block5(x)
         x = self.upsize4(x)
@@ -115,8 +115,8 @@ class VAE(nn.Module):
         super(VAE, self).__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.latent_dim = latent_dim
-        self.z_mean = nn.Linear(256*80, latent_dim)
-        self.z_log_sigma = nn.Linear(256*80, latent_dim)
+        self.z_mean = nn.Linear(256, latent_dim)
+        self.z_log_sigma = nn.Linear(256, latent_dim)
         self.epsilon = torch.normal(size=(1, latent_dim), mean=0, std=1.0, device=self.device)
         self.encoder = Encoder()
         self.decoder = Decoder(latent_dim)
